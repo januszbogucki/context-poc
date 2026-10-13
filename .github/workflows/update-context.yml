@@ -15,6 +15,7 @@ on:
       - 'config/**'
       - 'public/**'
       - 'scripts/**'
+      - '.github/workflows/update-context.yml' # zmiana samego workflow też go uruchamia
   workflow_dispatch: # ręczne uruchomienie z zakładki Actions
 
 permissions:
@@ -27,11 +28,12 @@ concurrency:
 
 jobs:
   update:
-    runs-on: ubuntu-latest
+    # Przypięta wersja systemu, żeby zmiana ubuntu-latest (Ubuntu 26 od 19.10.2026) nie zmieniała środowiska.
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
@@ -43,17 +45,33 @@ jobs:
           # status --porcelain widzi też nowe (nieśledzone) pliki, w przeciwieństwie do git diff
           if [ -z "$(git status --porcelain -- docs/context)" ]; then
             echo "Kontekst bez zmian, nic do zrobienia."
+            echo "### Kontekst bez zmian :white_check_mark:" >> "$GITHUB_STEP_SUMMARY"
+            echo "Mapa repozytorium jest aktualna, nie utworzono commita." >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
+
+          echo "Zmienione pliki kontekstu:"
+          git status --short -- docs/context
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add docs/context
           git commit -m "chore(context): update repository map"
+          echo "Utworzono commit $(git rev-parse --short HEAD), wysyłam na gałąź ${GITHUB_REF_NAME}"
 
           # Jeśli w międzyczasie ktoś wpuścił nowy commit na gałąź, dociągnij go i spróbuj ponownie.
           for attempt in 1 2 3; do
+            echo "Próba wysłania $attempt/3"
             if git push origin "HEAD:${GITHUB_REF_NAME}"; then
+              {
+                echo "### Kontekst zaktualizowany :rocket:"
+                echo "| | |"
+                echo "|---|---|"
+                echo "| Gałąź | \`${GITHUB_REF_NAME}\` |"
+                echo "| Commit | \`$(git rev-parse --short HEAD)\` |"
+                echo "| Plik | \`docs/context/repomap.md\` ($(wc -l < docs/context/repomap.md) linii) |"
+                echo "| Wywołał | ${GITHUB_EVENT_NAME} (${GITHUB_ACTOR}) |"
+              } >> "$GITHUB_STEP_SUMMARY"
               exit 0
             fi
             git pull --rebase origin "${GITHUB_REF_NAME}"
