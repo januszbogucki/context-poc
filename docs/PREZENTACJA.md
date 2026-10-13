@@ -73,8 +73,8 @@ Cały proces jest mechaniczny:
 1. **Wybiera pliki** (u nas: pliki PHP śledzone przez git, czyli bez `vendor/` i `var/`).
 2. **Parsuje je biblioteką tree-sitter.** To parser składni, rozumie strukturę języka, nie jest to zwykłe wyszukiwanie tekstu. Wyciąga **definicje** (klasy, metody) i **odwołania** do nich.
 3. **Buduje graf** zależności: pliki to węzły, odwołania to krawędzie.
-4. **Rankinguje algorytmem PageRank** (jak w wyszukiwarce): ważniejsze są pliki, do których inne często się odwołują. U nas wszystkie pliki dostały tę samą wartość, więc ranking niewiele wnosi, a ja sortuję po nazwie.
-5. **Mieści wynik w limicie tokenów** (u nas 4096) i zapisuje jako tekst.
+4. **Ranking (PageRank) jest u nas w praktyce wyłączony.** Narzędzie liczy PageRank (jak w wyszukiwarce: ważniejsze są pliki, do których inne często się odwołują) tylko wtedy, gdy podamy pliki, nad którymi pracujemy. My ich nie podajemy, więc **wszystkie definicje dostają tę samą rangę** (`1.0`). Wynik pokazuje strukturę, ale nie ważność.
+5. **Mieści wynik w limicie tokenów** (u nas 4096) i zapisuje jako tekst. Gdy mapa jest za duża, bierze tyle pierwszych definicji, ile się zmieści. Przy równych rangach **wybór jest przypadkowy i różny między uruchomieniami** (test: 4 uruchomienia z budżetem 250 tokenów dały 4 różne zestawy plików). W małym repo, gdzie wszystko się mieści, nie ma to znaczenia. W dużym oznacza, że bez dodatkowej pracy (mapy per moduł, większy budżet, wskazywanie plików) mapa byłaby losowym wycinkiem.
 
 W wyniku nie ma ani jednej informacji „zrozumianej” przez AI. To odcisk struktury kodu.
 

@@ -4,8 +4,12 @@
 Używa klasy RepoMap z narzędzia RepoMapper (https://github.com/pdavis68/RepoMapper).
 Własny skrypt jest potrzebny, bo CLI RepoMappera drukuje krotkę (tekst, raport) zamiast samego tekstu.
 
-Użycie: generate_repomap.py <katalog_RepoMappera> <wyjściowy_plik.md>
+Użycie: generate_repomap.py <katalog_RepoMappera> <wyjściowy_plik.md> [prefiks_modułu]
 Uruchamiany z katalogu głównego repozytorium. Pliki bierze z `git ls-files`, więc pomija vendor/ i var/.
+
+Opcjonalny prefiks (np. src/Cart) ogranicza mapę do jednego modułu. Budżet tokenów mapy można zmienić
+zmienną środowiskową MAP_TOKENS (domyślnie 4096). Kod wyjścia 3 oznacza, że po filtrach nie zostało
+nic do opisania (np. moduł bez klas i funkcji), a nie błąd.
 """
 
 import fnmatch
@@ -15,13 +19,14 @@ import sys
 import tempfile
 from pathlib import Path
 
-MAP_TOKENS = 4096
+MAP_TOKENS = int(os.environ.get("MAP_TOKENS", "4096"))
+EMPTY_EXIT_CODE = 3
 EXCLUDE_FILE = Path(__file__).with_name("repomap-exclude.txt")
 EXTENSIONS = (".php",)
 
-HEADER = """# Mapa repozytorium (wygenerowana automatycznie)
+HEADER = """# {title} (wygenerowana automatycznie)
 
-Plik generuje `scripts/update-context.sh` (lokalnie lub w GitHub Action `update-context`).
+Plik generuje `{generator}` {where}.
 **Nie edytuj ręcznie**, zmiany zostaną nadpisane przy następnym uruchomieniu.
 
 Zawiera klasy i sygnatury metod z numerami linii. Nie opisuje powiązań między klasami ani reguł biznesowych.
@@ -66,6 +71,7 @@ def is_excluded(path: str, patterns: list[str]) -> bool:
 
 def main() -> None:
     mapper_dir, output = Path(sys.argv[1]).resolve(), Path(sys.argv[2]).resolve()
+    scope = sys.argv[3].strip("/") if len(sys.argv) > 3 else None
     repo_root = Path.cwd().resolve()
     sys.path.insert(0, str(mapper_dir))
 
@@ -73,6 +79,8 @@ def main() -> None:
         ["git", "ls-files"], cwd=repo_root, capture_output=True, text=True, check=True
     ).stdout.splitlines()
     candidates = [f for f in tracked if f.endswith(EXTENSIONS) and (repo_root / f).is_file()]
+    if scope:
+        candidates = [f for f in candidates if f.startswith(scope + "/")]
     patterns = load_exclude_patterns()
     excluded = [f for f in candidates if is_excluded(f, patterns)]
     files = sorted(str(repo_root / f) for f in candidates if f not in excluded)
@@ -101,13 +109,21 @@ def main() -> None:
         content, report = repo_map.get_repo_map(chat_files=[], other_files=files)
 
     if not content:
-        sys.exit("RepoMapper nie zwrócił mapy")
+        print(f"RepoMapper nie zwrócił mapy dla ({scope or 'repozytorium'})", file=sys.stderr)
+        sys.exit(EMPTY_EXIT_CODE)
 
     # Linie "(Rank value: ...)" nic nie wnoszą (wszystkie pliki mają tę samą wartość) i szumią w diffie.
     lines = [line for line in content.splitlines() if not line.startswith("(Rank value:")]
     body = "\n\n".join(sort_blocks(lines))
     output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(HEADER + "```\n" + body + "\n```\n", encoding="utf-8")
+    header = HEADER.format(
+        title=f"Mapa modułu {scope}" if scope else "Mapa repozytorium",
+        generator="scripts/update-context-modules.sh" if scope else "scripts/update-context.sh",
+        where="(uruchamiany ręcznie, to przykład niepodpięty do GitHub Action)"
+        if scope
+        else "(lokalnie lub w GitHub Action `update-context`)",
+    )
+    output.write_text(header + "```\n" + body + "\n```\n", encoding="utf-8")
     print(f"zapisano {output.relative_to(repo_root)} ({len(files)} plików)")
 
 
