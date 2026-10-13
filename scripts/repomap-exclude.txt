@@ -1,0 +1,19 @@
+# Pliki wykluczone z mapy repozytorium (docs/context/repomap.md).
+# Jeden wzorzec na linię, puste linie i linie z # są pomijane.
+#
+# Wzorce dopasowujemy (bez rozróżniania wielkości liter) do ścieżki względem katalogu głównego repo (np. src/Cart/Cart.php)
+# oraz do samej nazwy pliku (np. Cart.php). Gwiazdka * pasuje do dowolnych znaków, także do /,
+# więc `tests/*` obejmuje też podkatalogi.
+#
+# Uwaga: mapa i tak zawiera tylko nazwy klas, metod i sygnatury (bez ciał funkcji, stałych
+# i wartości), a pliki spoza git (np. .env) oraz inne niż .php nigdy do niej nie trafiają.
+# Wykluczenia są dodatkowym zabezpieczeniem na wypadek, gdyby nazwa pliku lub klasy zdradzała coś poufnego.
+
+# Testy: nie opisują architektury aplikacji i dodają szum do mapy
+tests/*
+
+# Konfiguracja lokalna i pliki z poświadczeniami
+*.local.php
+*credentials*
+*secret*
+config/secrets/*
