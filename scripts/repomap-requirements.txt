@@ -1,0 +1,9 @@
+# Wersje przypięte do tych z uv.lock projektu RepoMapper. Bez przypięcia pip instaluje nowsze
+# tree-sitter (0.26), które nie ma metody Language.query, i parsowanie wszystkich plików się wywala.
+tree-sitter==0.25.1
+tree-sitter-language-pack==0.9.0
+grep-ast==0.9.0
+tiktoken==0.11.0
+networkx==3.5
+diskcache==5.6.3
+pygments>=2.14.0

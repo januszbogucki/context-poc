@@ -1,0 +1,62 @@
+name: update-context
+
+# Odświeża docs/context/repomap.md po zmianach w kodzie i commituje go bezpośrednio na gałąź, która
+# wywołała workflow (bez PR). Wymaga, żeby gałąź nie blokowała pushy od GITHUB_TOKEN: ochrona gałęzi
+# z wymaganym PR i review zablokuje ten commit.
+# W firmie zmień `main` na `master` (jedyne miejsce zależne od nazwy gałęzi to linia branches poniżej).
+on:
+  push:
+    branches: [main]
+    # Uruchamiaj tylko, gdy zmienił się kod. Commit bota zmienia wyłącznie docs/context/, którego tu nie ma,
+    # więc nie uruchamia workflow ponownie (pętli nie będzie). Dodatkowo push z GITHUB_TOKEN sam
+    # nigdy nie wywołuje kolejnego workflow.
+    paths:
+      - 'src/**'
+      - 'config/**'
+      - 'public/**'
+      - 'scripts/**'
+  workflow_dispatch: # ręczne uruchomienie z zakładki Actions
+
+permissions:
+  contents: write       # commit i push na gałąź
+
+# Dwa merge'e pod rząd: starszy przebieg jest anulowany, liczy się najnowszy stan kodu.
+concurrency:
+  group: update-context
+  cancel-in-progress: true
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Wygeneruj mapę repozytorium
+        run: ./scripts/update-context.sh
+
+      - name: Zacommituj zmiany kontekstu na gałąź
+        run: |
+          # status --porcelain widzi też nowe (nieśledzone) pliki, w przeciwieństwie do git diff
+          if [ -z "$(git status --porcelain -- docs/context)" ]; then
+            echo "Kontekst bez zmian, nic do zrobienia."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/context
+          git commit -m "chore(context): update repository map"
+
+          # Jeśli w międzyczasie ktoś wpuścił nowy commit na gałąź, dociągnij go i spróbuj ponownie.
+          for attempt in 1 2 3; do
+            if git push origin "HEAD:${GITHUB_REF_NAME}"; then
+              exit 0
+            fi
+            git pull --rebase origin "${GITHUB_REF_NAME}"
+          done
+          echo "Nie udało się wypchnąć zmian po 3 próbach." >&2
+          exit 1
