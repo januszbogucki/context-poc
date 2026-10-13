@@ -1,3 +1,4 @@
 vendor/
 var/*
 !var/.gitkeep
+.context-tools/
