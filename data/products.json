@@ -1,0 +1,7 @@
+[
+    {"id": "p-100", "name": "Kubek ceramiczny", "price": 2999, "stock": 50},
+    {"id": "p-101", "name": "Notes A5", "price": 1500, "stock": 120},
+    {"id": "p-102", "name": "Długopis żelowy", "price": 599, "stock": 300},
+    {"id": "p-103", "name": "Plecak miejski", "price": 17900, "stock": 15},
+    {"id": "p-104", "name": "Lampka biurkowa", "price": 8900, "stock": 2}
+]
