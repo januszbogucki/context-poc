@@ -1,5 +1,10 @@
 # Ściągawka do demo: automatyczny kontekst repozytorium (RepoMapper + GitHub Action)
 
+> Poniższy scenariusz opisuje historyczny wariant z samą mapą. Aktualny workflow
+> dodaje przyrostowe generowanie opisu przez Codex Business (lokalnie przez
+> logowanie ChatGPT; w CI opcjonalnie przez token).
+> Konfiguracja i aktualne zachowanie: [CONTEXT-SETUP.md](CONTEXT-SETUP.md).
+
 Demo na gildii backendowej, 14.10.2026, 15 minut. Dwa przypadki:
 1. porównanie promptów z kontekstem i bez,
 2. GitHub Action, który buduje i odświeża kontekst po merge.

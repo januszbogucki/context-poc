@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "provider": "codex",
+  "runs": [
+    {
+      "mode": "full",
+      "files_analyzed": 49,
+      "files_removed": 0,
+      "files_total": 49,
+      "source_commit": "70ffe54839b171787b36b6b3cc23c16eca2a66f4",
+      "started_at": "2026-10-20T21:33:19+00:00",
+      "duration_seconds": 76.567,
+      "status": "success",
+      "tokens": {
+        "input_tokens": 30641,
+        "output_tokens": 4398,
+        "total_tokens": 35039,
+        "cached_input_tokens": 12288,
+        "cache_creation_input_tokens": null,
+        "reasoning_output_tokens": 88
+      },
+      "models": []
+    }
+  ]
+}
