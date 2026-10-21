@@ -45,6 +45,11 @@ final readonly class Money
         return new self(intdiv($this->amount * $percent, 100), $this->currency);
     }
 
+    public function isZero(): bool
+    {
+        return $this->amount === 0;
+    }
+
     public function isGreaterThanOrEqual(self $other): bool
     {
         $this->assertSameCurrency($other);
