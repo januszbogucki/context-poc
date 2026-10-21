@@ -241,8 +241,9 @@ src/Shared/Money.php:
   31:     public function subtract(self $other): self
   37:     public function multiply(int $factor): self
   43:     public function percent(int $percent): self
-  48:     public function isGreaterThanOrEqual(self $other): bool
-  54:     public function min(self $other): self
-  60:     public function toArray(): array
-  69:     private function assertSameCurrency(self $other): void
+  48:     public function isZero(): bool
+  53:     public function isGreaterThanOrEqual(self $other): bool
+  59:     public function min(self $other): self
+  65:     public function toArray(): array
+  74:     private function assertSameCurrency(self $other): void
 ```

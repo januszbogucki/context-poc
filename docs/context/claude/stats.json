@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "provider": "claude",
+  "runs": [
+    {
+      "mode": "full",
+      "files_analyzed": 49,
+      "files_removed": 0,
+      "files_total": 49,
+      "source_commit": "fc77ec11d95b754262274f0016c225a26e8280bd",
+      "started_at": "2026-10-21T07:19:12+00:00",
+      "duration_seconds": 112.421,
+      "status": "success",
+      "tokens": {
+        "input_tokens": 26269,
+        "output_tokens": 12751,
+        "total_tokens": 39020,
+        "cached_input_tokens": 649,
+        "cache_creation_input_tokens": 25618,
+        "reasoning_output_tokens": 3554
+      },
+      "models": [
+        "claude-opus-5-5"
+      ]
+    }
+  ]
+}
