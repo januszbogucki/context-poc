@@ -1,9 +1,9 @@
 name: update-context
 
-# Odświeża docs/context/repomap.md po zmianach w kodzie i commituje go bezpośrednio na gałąź, która
-# wywołała workflow (bez PR). Wymaga, żeby gałąź nie blokowała pushy od GITHUB_TOKEN: ochrona gałęzi
-# z wymaganym PR i review zablokuje ten commit.
-# W firmie zmień `main` na `master` (jedyne miejsce zależne od nazwy gałęzi to linia branches poniżej).
+# Generuje mapę i opis przez Claude (pierwszeństwo) lub Codex, zapisując wynik na main.
+# Bez obu tokenów generuje samą mapę. Wymaga możliwości push od GITHUB_TOKEN:
+# ochrona gałęzi z wymaganym PR i review zablokuje ten commit.
+# W firmie zmień nazwę gałęzi w branches i warunku jobs.update.if.
 on:
   push:
     branches: [main]
@@ -15,11 +15,15 @@ on:
       - 'config/**'
       - 'public/**'
       - 'scripts/**'
+      - 'data/**'
+      - 'composer.json'
+      - 'AGENTS.md'
+      - 'docs/context/instructions.md'
       - '.github/workflows/update-context.yml' # zmiana samego workflow też go uruchamia
   workflow_dispatch: # ręczne uruchomienie z zakładki Actions
 
 permissions:
-  contents: write       # commit i push na gałąź
+  contents: read
 
 # Dwa merge'e pod rząd: starszy przebieg jest anulowany, liczy się najnowszy stan kodu.
 concurrency:
@@ -28,10 +32,30 @@ concurrency:
 
 jobs:
   update:
+    # Ręczne uruchomienie także tylko na main; nigdy kod z PR/forka.
+    if: github.ref == 'refs/heads/main'
     # Przypięta wersja systemu, żeby zmiana ubuntu-latest (Ubuntu 26 od 19.10.2026) nie zmieniała środowiska.
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Wybierz Claude, Codex lub samą mapę
+        id: auth
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          CODEX_ACCESS_TOKEN: ${{ secrets.CODEX_ACCESS_TOKEN }}
+        run: |
+          provider="$(python3 -c 'import sys; sys.path.insert(0, "scripts"); from generate_application_context import select_provider; print(select_provider())')"
+          echo "provider=$provider" >> "$GITHUB_OUTPUT"
+          if [ "$provider" = "none" ]; then
+            echo "### AI pominięte — brak tokenów Claude i Codex" >> "$GITHUB_STEP_SUMMARY"
+            echo "Generowana jest sama mapa. Opis aktualizuj lokalnie według docs/CONTEXT-SETUP.md." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "### Dostawca kontekstu: $provider" >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - uses: actions/setup-python@v7
         with:
@@ -40,13 +64,75 @@ jobs:
       - name: Wygeneruj mapę repozytorium
         run: ./scripts/update-context.sh
 
-      - name: Zacommituj zmiany kontekstu na gałąź
+      - uses: actions/setup-node@v4
+        if: steps.auth.outputs.provider != 'none'
+        with:
+          node-version: '22'
+
+      - name: Zainstaluj Claude Code CLI (przypięta wersja)
+        if: steps.auth.outputs.provider == 'claude'
+        run: npm install --global @anthropic-ai/claude-code@2.1.305
+
+      - name: Zainstaluj Codex CLI (przypięta wersja)
+        if: steps.auth.outputs.provider == 'codex'
+        run: npm install --global @openai/codex@0.163.0
+
+      - name: Wygeneruj kontekst aplikacji przez wybranego dostawcę
+        if: steps.auth.outputs.provider != 'none'
+        timeout-minutes: 12
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          CODEX_ACCESS_TOKEN: ${{ secrets.CODEX_ACCESS_TOKEN }}
+        run: python3 scripts/generate_application_context.py
+
+      - name: Przekaż wyłącznie gotowe dokumenty do zadania zapisującego
+        # Po błędzie modelu statystyki pozostają w artefakcie; zadanie commit nie wystartuje.
+        if: ${{ !cancelled() && steps.auth.outcome == 'success' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: application-context
+          path: |
+            docs/context/repomap.md
+            docs/context/codex/application.md
+            docs/context/codex/application-state.json
+            docs/context/codex/stats.json
+            docs/context/codex/stats.md
+            docs/context/claude/application.md
+            docs/context/claude/application-state.json
+            docs/context/claude/stats.json
+            docs/context/claude/stats.md
+          if-no-files-found: error
+          retention-days: 1
+
+  commit:
+    needs: update
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: application-context
+          path: docs/context
+
+      - name: Zacommituj mapę i opis aplikacji na main
         run: |
+          # Nie rebazuj wygenerowanego opisu na nowszy kod: wtedy byłby już nieaktualny.
+          git fetch origin "$GITHUB_REF_NAME"
+          if [ "$(git rev-parse FETCH_HEAD)" != "$GITHUB_SHA" ]; then
+            echo "::error::Gałąź ma nowszy commit. Uruchom workflow ponownie dla aktualnego main."
+            exit 1
+          fi
           # status --porcelain widzi też nowe (nieśledzone) pliki, w przeciwieństwie do git diff
-          if [ -z "$(git status --porcelain -- docs/context)" ]; then
+          if [ -z "$(git status --porcelain -- docs/context/repomap.md docs/context/codex docs/context/claude)" ]; then
             echo "Kontekst bez zmian, nic do zrobienia."
             echo "### Kontekst bez zmian :white_check_mark:" >> "$GITHUB_STEP_SUMMARY"
-            echo "Mapa repozytorium jest aktualna, nie utworzono commita." >> "$GITHUB_STEP_SUMMARY"
+            echo "Mapa i opis aplikacji są aktualne, nie utworzono commita." >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
 
@@ -55,26 +141,34 @@ jobs:
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add docs/context
-          git commit -m "chore(context): update repository map"
+          git add -- docs/context/repomap.md
+          for provider in codex claude; do
+            for name in application.md application-state.json stats.json stats.md; do
+              file="docs/context/$provider/$name"
+              if [ -f "$file" ]; then
+                git add -- "$file"
+              fi
+            done
+          done
+          git commit -m "chore(context): update repository map and application context"
           echo "Utworzono commit $(git rev-parse --short HEAD), wysyłam na gałąź ${GITHUB_REF_NAME}"
 
-          # Jeśli w międzyczasie ktoś wpuścił nowy commit na gałąź, dociągnij go i spróbuj ponownie.
-          for attempt in 1 2 3; do
-            echo "Próba wysłania $attempt/3"
-            if git push origin "HEAD:${GITHUB_REF_NAME}"; then
-              {
-                echo "### Kontekst zaktualizowany :rocket:"
-                echo "| | |"
-                echo "|---|---|"
-                echo "| Gałąź | \`${GITHUB_REF_NAME}\` |"
-                echo "| Commit | \`$(git rev-parse --short HEAD)\` |"
-                echo "| Plik | \`docs/context/repomap.md\` ($(wc -l < docs/context/repomap.md) linii) |"
-                echo "| Wywołał | ${GITHUB_EVENT_NAME} (${GITHUB_ACTOR}) |"
-              } >> "$GITHUB_STEP_SUMMARY"
-              exit 0
-            fi
-            git pull --rebase origin "${GITHUB_REF_NAME}"
-          done
-          echo "Nie udało się wypchnąć zmian po 3 próbach." >&2
-          exit 1
+          # Zwykły push odmówi zapisu, jeśli gałąź zmieni się także po sprawdzeniu powyżej.
+          git push origin "HEAD:${GITHUB_REF_NAME}"
+          {
+            echo "### Kontekst zaktualizowany :rocket:"
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Gałąź | \`${GITHUB_REF_NAME}\` |"
+            echo "| Commit | \`$(git rev-parse --short HEAD)\` |"
+            echo "| Mapa | \`docs/context/repomap.md\` ($(wc -l < docs/context/repomap.md) linii) |"
+            for provider in codex claude; do
+              if [ -f "docs/context/$provider/application.md" ]; then
+                echo "| Opis $provider | \`docs/context/$provider/application.md\` (ostatni udany zapis tego dostawcy) |"
+              fi
+              if [ -f "docs/context/$provider/stats.md" ]; then
+                echo "| Tokeny $provider | \`docs/context/$provider/stats.md\` |"
+              fi
+            done
+            echo "| Wywołał | ${GITHUB_EVENT_NAME} (${GITHUB_ACTOR}) |"
+          } >> "$GITHUB_STEP_SUMMARY"

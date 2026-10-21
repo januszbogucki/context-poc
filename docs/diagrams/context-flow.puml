@@ -1,0 +1,74 @@
+@startuml
+title Automatyczne budowanie kontekstu: feature → develop → master
+hide footbox
+skinparam backgroundColor white
+skinparam sequenceMessageAlign center
+skinparam responseMessageBelowArrow true
+
+participant "feature/nazwa-zmiany" as Feature
+participant "develop" as Develop
+participant "master" as Master
+participant "GitHub Actions" as CI
+participant "RepoMapper" as Mapper
+participant "Agent AI\nCodex lub Claude" as AI
+
+Feature -> Develop: Merge PR z funkcjonalnością
+note over Feature, Develop
+  Integracja i standardowe testy CI.
+  Na tym etapie nie aktualizujemy kontekstu wydania.
+end note
+
+Develop -> Master: Merge PR wydania
+Master -> CI: Push na master ze zmianami objętymi filtrem workflow
+activate CI
+CI -> Master: Pobierz dokładny commit wydania
+Master --> CI: Kod aplikacji i poprzedni kontekst\nze stanu wybranego dostawcy (codex/ lub claude/)
+
+CI -> Mapper: Wygeneruj mapę klas i sygnatur
+Mapper --> CI: docs/context/repomap.md
+
+CI -> CI: Wybierz dozwolone źródła, głównie src/\nPorównaj ich skróty z ostatnim udanym generowaniem
+
+alt Brak poprawnego kontekstu/stanu lub zmiana promptu
+  CI -> AI: Prompt + mapa + wszystkie wybrane źródła
+  AI --> CI: Pełny opis aplikacji
+else Są zmiany od ostatniego udanego generowania
+  CI -> AI: Prompt + mapa + poprzedni opis\n+ pliki dodane/zmienione + lista usuniętych
+  AI --> CI: Kompletny dokument z aktualizacją\ndotkniętych obszarów i powiązań
+else Brak zmian źródeł
+  CI -> CI: Pomiń wywołanie AI
+end
+
+CI -> CI: Sprawdź wynik i przygotuj dokumenty oraz stan
+
+alt Generowanie lub walidacja zakończone błędem
+  CI -> CI: Zatrzymaj workflow\nNie publikuj częściowych wyników
+else Wygenerowane dokumenty lub stan różnią się od repo
+  CI -> Master: Sprawdź, czy commit wydania nadal jest HEAD
+  alt master ma już nowszy commit
+    Master --> CI: Stan gałęzi zmienił się
+    CI -> CI: Przerwij zapis; wymagany przebieg dla aktualnego master
+  else master nadal wskazuje analizowany commit
+    Master --> CI: Commit nadal aktualny
+    CI -> Master: Commit i zwykły push bota:\nrepomap.md + <dostawca>/application.md\n+ <dostawca>/application-state.json
+    note over Master, CI
+      Commit bota zmienia tylko docs/context/.
+      Filtr workflow nie uruchamia generowania od tych plików.
+      Zwykły push odrzuci także zmianę gałęzi po sprawdzeniu HEAD.
+    end note
+  end
+else Wyniki bez zmian
+  CI -> CI: Zakończ bez commita
+end
+deactivate CI
+
+note over Master, AI
+  Wynik opisuje wersję na master.
+  Wspólna mapa i instructions.md leżą w docs/context/.
+  Wyniki i stany są niezależne w docs/context/codex/ oraz docs/context/claude/.
+  Kolejne sesje agentów czytają dokumenty z repo i weryfikują szczegóły w kodzie.
+  Diagram przedstawia wariant docelowy z działającym uwierzytelnianiem AI w CI.
+  Obecny POC używa main; bez tokena CI aktualizuje samą mapę,
+  a opis generowany jest lokalnie.
+end note
+@enduml

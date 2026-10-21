@@ -2,3 +2,4 @@ vendor/
 var/*
 !var/.gitkeep
 .context-tools/
+__pycache__/

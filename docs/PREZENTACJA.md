@@ -1,5 +1,9 @@
 # Plan prezentacji: RepoMapper i automatyczne odświeżanie kontekstu
 
+> Historyczna prezentacja wariantu bez modelu. Workflow rozszerzono o pełną
+> pierwszą budowę i kolejne przyrostowe aktualizacje przez Codex Business.
+> Logowanie lokalne i opcjonalny token CI: [CONTEXT-SETUP.md](CONTEXT-SETUP.md).
+
 Gildia backendowa, 14.10.2026, 15 minut. Komendy, kod do demo na żywo i plan B są w [`DEMO.md`](DEMO.md). Ten plik opisuje, **co powiedzieć i w jakiej kolejności**.
 
 ## Plan w skrócie
