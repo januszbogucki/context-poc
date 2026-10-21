@@ -52,6 +52,15 @@ def digest(content: str) -> str:
     return hashlib.sha256(content.encode("utf-8")).hexdigest()
 
 
+def claude_credential() -> tuple[str, str] | None:
+    """Klucz API Claude ma pierwszeństwo przed tokenem subskrypcji (OAuth)."""
+    for name in ("ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN"):
+        value = os.environ.get(name, "").strip()
+        if value:
+            return name, value
+    return None
+
+
 def select_provider(provider: str = "auto", auth: str = "token") -> str:
     if provider not in ("auto", "codex", "claude"):
         raise ValueError("Nieznany dostawca modelu.")
@@ -61,7 +70,7 @@ def select_provider(provider: str = "auto", auth: str = "token") -> str:
         return "codex"
     if provider != "auto":
         return provider
-    if os.environ.get("CLAUDE_CODE_OAUTH_TOKEN", "").strip():
+    if claude_credential():
         return "claude"
     if os.environ.get("CODEX_ACCESS_TOKEN", "").strip():
         return "codex"
@@ -74,10 +83,16 @@ def generate(root: Path = ROOT, auth: str = "token", provider: str = "auto", for
     if auth == "chatgpt" and os.environ.get("GITHUB_ACTIONS") == "true":
         raise ValueError("Logowanie ChatGPT służy tylko do pracy lokalnej; CI wymaga tokena.")
     provider = select_provider(provider, auth)
-    token_name = "CLAUDE_CODE_OAUTH_TOKEN" if provider == "claude" else "CODEX_ACCESS_TOKEN"
-    token = os.environ.get(token_name, "").strip()
     if provider == "none":
-        raise ValueError("Brak tokena: ustaw CLAUDE_CODE_OAUTH_TOKEN lub CODEX_ACCESS_TOKEN według docs/CONTEXT-SETUP.md.")
+        raise ValueError(
+            "Brak tokena: ustaw ANTHROPIC_API_KEY, CLAUDE_CODE_OAUTH_TOKEN lub CODEX_ACCESS_TOKEN "
+            "według docs/CONTEXT-SETUP.md."
+        )
+    if provider == "claude":
+        token_name, token = claude_credential() or ("CLAUDE_CODE_OAUTH_TOKEN", "")
+    else:
+        token_name = "CODEX_ACCESS_TOKEN"
+        token = os.environ.get(token_name, "").strip()
     if auth == "token" and not token:
         raise ValueError(
             f"Brak {token_name}. Dodaj sekret repozytorium według docs/CONTEXT-SETUP.md."
@@ -133,7 +148,7 @@ def generate(root: Path = ROOT, auth: str = "token", provider: str = "auto", for
             claude_home = temporary / "claude-home"
             claude_home.mkdir(mode=0o700)
             environment.update(
-                CLAUDE_CODE_OAUTH_TOKEN=token, CLAUDE_CONFIG_DIR=str(claude_home),
+                {token_name: token}, CLAUDE_CONFIG_DIR=str(claude_home),
                 DISABLE_AUTOUPDATER="1",
             )
         elif auth == "token":
@@ -199,7 +214,7 @@ def generate(root: Path = ROOT, auth: str = "token", provider: str = "auto", for
                 section not in content.splitlines() for section in SECTIONS
             ) or len(content) < 800 or len(content.encode("utf-8")) > 60_000:
                 raise ValueError(f"{generator_name} zwrócił pusty lub niepoprawny dokument; poprzedni kontekst zachowano.")
-            secrets = [os.environ.get(name, "").strip() for name in ("CODEX_ACCESS_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN")]
+            secrets = [os.environ.get(name, "").strip() for name in ("CODEX_ACCESS_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY")]
             if any(secret and secret in content for secret in secrets):
                 raise ValueError("Wynik zawiera poświadczenie; zapis zablokowany.")
             destination.parent.mkdir(parents=True, exist_ok=True)
