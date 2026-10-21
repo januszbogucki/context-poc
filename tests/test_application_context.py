@@ -49,9 +49,15 @@ class ContextGenerationTest(unittest.TestCase):
         self.assertNotIn("GITHUB_TOKEN", kwargs["env"])
         self.assertNotIn("OPENAI_API_KEY", kwargs["env"])
         self.assertNotIn("CODEX_API_KEY", kwargs["env"])
-        self.assertNotIn("ANTHROPIC_API_KEY", kwargs["env"])
+        if args[0] != "claude":
+            self.assertNotIn("ANTHROPIC_API_KEY", kwargs["env"])
         if args[0] == "claude":
-            self.assertEqual(kwargs["env"]["CLAUDE_CODE_OAUTH_TOKEN"], "fake-claude-token")
+            if os.environ.get("ANTHROPIC_API_KEY") == "fake-api-key":
+                self.assertEqual(kwargs["env"]["ANTHROPIC_API_KEY"], "fake-api-key")
+                self.assertNotIn("CLAUDE_CODE_OAUTH_TOKEN", kwargs["env"])
+            else:
+                self.assertEqual(kwargs["env"]["CLAUDE_CODE_OAUTH_TOKEN"], "fake-claude-token")
+                self.assertNotIn("ANTHROPIC_API_KEY", kwargs["env"])
             self.assertNotIn("CODEX_ACCESS_TOKEN", kwargs["env"])
             self.assertIn("CLAUDE_CONFIG_DIR", kwargs["env"])
             self.assertEqual(args[args.index("--tools") + 1], "")
@@ -76,7 +82,7 @@ class ContextGenerationTest(unittest.TestCase):
 
     def generate(self, auth="token", provider="auto", claude_token=""):
         with patch.dict(os.environ, {"CODEX_ACCESS_TOKEN": "fake-test-token", "GITHUB_TOKEN": "private",
-                                     "CLAUDE_CODE_OAUTH_TOKEN": claude_token, "ANTHROPIC_API_KEY": "fake-api-key",
+                                     "CLAUDE_CODE_OAUTH_TOKEN": claude_token, "ANTHROPIC_API_KEY": "",
                                      "GITHUB_ACTIONS": "false", "CODEX_HOME": "/tmp/test-existing-codex-home",
                                      "OPENAI_API_KEY": "fake-api-key", "CODEX_API_KEY": "fake-api-key"}), \
              patch.object(generator, "source_files", return_value=self.files), \
@@ -130,7 +136,7 @@ class ContextGenerationTest(unittest.TestCase):
 
     def test_force_measures_another_full_run_without_source_changes(self):
         self.generate()
-        with patch.dict(os.environ, {"CODEX_ACCESS_TOKEN": "fake-test-token", "CLAUDE_CODE_OAUTH_TOKEN": ""}), \
+        with patch.dict(os.environ, {"CODEX_ACCESS_TOKEN": "fake-test-token", "CLAUDE_CODE_OAUTH_TOKEN": "", "ANTHROPIC_API_KEY": ""}), \
              patch.object(generator, "source_files", return_value=self.files), \
              patch.object(generator.subprocess, "run", side_effect=self.run_process):
             generator.generate(self.root, force=True)
@@ -217,21 +223,31 @@ class ContextGenerationTest(unittest.TestCase):
             self.assertEqual(before, self.snapshot())
 
     def test_missing_token_fails_before_model(self):
-        with patch.dict(os.environ, {"CODEX_ACCESS_TOKEN": "", "CLAUDE_CODE_OAUTH_TOKEN": ""}), \
+        with patch.dict(os.environ, {"CODEX_ACCESS_TOKEN": "", "CLAUDE_CODE_OAUTH_TOKEN": "", "ANTHROPIC_API_KEY": ""}), \
              patch.object(generator.subprocess, "run") as run:
             with self.assertRaisesRegex(ValueError, "Brak tokena"):
                 generator.generate(self.root)
             run.assert_not_called()
 
     def test_provider_priority_for_all_secret_combinations(self):
-        for claude_token, codex_token, expected in [
-            ("", "", "none"), ("", "codex", "codex"),
-            ("claude", "", "claude"), ("claude", "codex", "claude"),
-            ("  ", "codex", "codex"),
+        for api_key, claude_token, codex_token, expected in [
+            ("", "", "", "none"), ("", "", "codex", "codex"),
+            ("", "claude", "", "claude"), ("", "claude", "codex", "claude"),
+            ("api", "", "codex", "claude"), ("api", "claude", "codex", "claude"),
+            ("  ", "  ", "codex", "codex"),
         ]:
-            with self.subTest(expected=expected, claude=bool(claude_token), codex=bool(codex_token)), \
-                 patch.dict(os.environ, {"CLAUDE_CODE_OAUTH_TOKEN": claude_token, "CODEX_ACCESS_TOKEN": codex_token}):
+            with self.subTest(expected=expected, api=bool(api_key), claude=bool(claude_token), codex=bool(codex_token)), \
+                 patch.dict(os.environ, {"ANTHROPIC_API_KEY": api_key, "CLAUDE_CODE_OAUTH_TOKEN": claude_token,
+                                         "CODEX_ACCESS_TOKEN": codex_token}):
                 self.assertEqual(generator.select_provider(), expected)
+
+    def test_claude_api_key_wins_over_subscription_token(self):
+        with patch.dict(os.environ, {"CODEX_ACCESS_TOKEN": "codex", "CLAUDE_CODE_OAUTH_TOKEN": "fake-claude-token",
+                                     "ANTHROPIC_API_KEY": "fake-api-key"}), \
+             patch.object(generator, "source_files", return_value=self.files), \
+             patch.object(generator.subprocess, "run", side_effect=self.run_process):
+            generator.generate(self.root)
+        self.assertEqual(self.provider_calls, ["claude"])
 
     def test_claude_wins_and_preserves_incremental_updates(self):
         self.generate(claude_token="fake-claude-token")
@@ -266,14 +282,14 @@ class ContextGenerationTest(unittest.TestCase):
         self.assertEqual(claude_result, (self.root / "docs/context/claude/application.md").read_bytes())
 
     def test_claude_only_token_generates_without_codex(self):
-        with patch.dict(os.environ, {"CODEX_ACCESS_TOKEN": "", "CLAUDE_CODE_OAUTH_TOKEN": "fake-claude-token"}), \
+        with patch.dict(os.environ, {"CODEX_ACCESS_TOKEN": "", "CLAUDE_CODE_OAUTH_TOKEN": "fake-claude-token", "ANTHROPIC_API_KEY": ""}), \
              patch.object(generator, "source_files", return_value=self.files), \
              patch.object(generator.subprocess, "run", side_effect=self.run_process):
             generator.generate(self.root)
         self.assertEqual(self.provider_calls, ["claude"])
 
     def test_explicit_provider_requires_its_own_token(self):
-        with patch.dict(os.environ, {"CODEX_ACCESS_TOKEN": "codex", "CLAUDE_CODE_OAUTH_TOKEN": ""}):
+        with patch.dict(os.environ, {"CODEX_ACCESS_TOKEN": "codex", "CLAUDE_CODE_OAUTH_TOKEN": "", "ANTHROPIC_API_KEY": ""}):
             with self.assertRaisesRegex(ValueError, "Brak CLAUDE_CODE_OAUTH_TOKEN"):
                 generator.generate(self.root, provider="claude")
 

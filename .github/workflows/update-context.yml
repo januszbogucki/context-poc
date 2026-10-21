@@ -1,7 +1,7 @@
 name: update-context
 
-# Generuje mapę i opis przez Claude (pierwszeństwo) lub Codex, zapisując wynik na main.
-# Bez obu tokenów generuje samą mapę. Wymaga możliwości push od GITHUB_TOKEN:
+# Generuje mapę i opis przez Claude (klucz API, potem token subskrypcji) lub Codex, zapisując wynik na main.
+# Bez żadnego tokena generuje samą mapę. Wymaga możliwości push od GITHUB_TOKEN:
 # ochrona gałęzi z wymaganym PR i review zablokuje ten commit.
 # W firmie zmień nazwę gałęzi w branches i warunku jobs.update.if.
 on:
@@ -45,6 +45,7 @@ jobs:
       - name: Wybierz Claude, Codex lub samą mapę
         id: auth
         env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           CODEX_ACCESS_TOKEN: ${{ secrets.CODEX_ACCESS_TOKEN }}
         run: |
@@ -81,6 +82,7 @@ jobs:
         if: steps.auth.outputs.provider != 'none'
         timeout-minutes: 12
         env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           CODEX_ACCESS_TOKEN: ${{ secrets.CODEX_ACCESS_TOKEN }}
         run: python3 scripts/generate_application_context.py

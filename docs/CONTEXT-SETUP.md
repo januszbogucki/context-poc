@@ -31,7 +31,8 @@ Workflow `update-context` automatycznie wybiera dostawcę na podstawie nazw sekr
 
 | Sekrety repozytorium | Dostawca generowania opisu |
 |---|---|
-| `CLAUDE_CODE_OAUTH_TOKEN` (także gdy jest token Codex) | Claude |
+| `ANTHROPIC_API_KEY` (klucz API, rozliczany za tokeny; ma pierwszeństwo) | Claude |
+| `CLAUDE_CODE_OAUTH_TOKEN` (subskrypcja; także gdy jest token Codex) | Claude |
 | Tylko `CODEX_ACCESS_TOKEN` | Codex |
 | Brak obu tokenów | Sama mapa, bez wywołania modelu |
 
@@ -63,7 +64,13 @@ ChatGPT Business, a w CI można zamiast niego użyć subskrypcji Claude.
    → Run workflow → main**. Workflow instaluje tylko CLI wybranego dostawcy:
    Claude Code `2.1.305` albo Codex `0.163.0`.
 
-Nie potrzebujesz `ANTHROPIC_API_KEY`, tokena Codex ani instalowania aplikacji
+Zamiast subskrypcji możesz dodać sekret `ANTHROPIC_API_KEY` (klucz API z konsoli
+Anthropic). Gdy są oba, workflow używa klucza API; token subskrypcji służy wtedy
+jako zapas tylko przy braku klucza (nie ma automatycznego przełączenia po błędzie).
+Do `CLAUDE_CODE_OAUTH_TOKEN` wklejaj wyłącznie token z `claude setup-token`
+(`sk-ant-oat…`); klucz API wklejony tam kończy się błędem 401.
+
+Bez klucza API nie potrzebujesz `ANTHROPIC_API_KEY`, tokena Codex ani instalowania aplikacji
 Claude GitHub App: ten workflow wywołuje CLI bezpośrednio, a commit wykonuje
 osobne zadanie z istniejącym `GITHUB_TOKEN`. Token Claude uwierzytelnia użycie
 subskrypcji; obowiązują jej limity i ustawienia dodatkowego zużycia.
