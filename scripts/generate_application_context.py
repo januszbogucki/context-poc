@@ -133,6 +133,7 @@ def generate(root: Path = ROOT, auth: str = "token", provider: str = "auto", for
     if len(bundle.encode("utf-8")) > 500_000:
         raise ValueError("Wejście przekracza limit POC 500 KB; zawęź listę plików.")
     print(f"Dostawca: {generator_name}; tryb: {'pełny' if full else 'przyrostowy'}; pliki do analizy: {len(changed)}, usunięte: {len(removed)}")
+    print(f"Poświadczenie: {token_name} (długość {len(token)})")  # Tylko nazwa i długość, nigdy wartość.
     # Pusty katalog roboczy: bez konfiguracji projektu, .git i poświadczeń GitHub.
     # CI ma osobny CODEX_HOME; tryb lokalny używa istniejącego logowania CLI.
     with tempfile.TemporaryDirectory(prefix="application-context-") as directory:
@@ -193,8 +194,17 @@ def generate(root: Path = ROOT, auth: str = "token", provider: str = "auto", for
             stats.transcript = result.stdout or ""
             if result.returncode:
                 # Nie publikuj transkryptu/modelowego wyjścia w publicznych logach CI.
+                # Wyjątek: krótki komunikat błędu API (np. 401), bez treści źródeł.
+                detail = ""
+                if provider == "claude":
+                    try:
+                        error = json.loads(result.stdout)
+                        if isinstance(error, dict) and error.get("is_error") and isinstance(error.get("result"), str):
+                            detail = " Błąd API: " + error["result"][:200].replace(token, "***") + "."
+                    except (ValueError, TypeError):
+                        pass
                 raise ValueError(
-                    f"{generator_name} zakończył się kodem {result.returncode}. Sprawdź logowanie/token, "
+                    f"{generator_name} zakończył się kodem {result.returncode}.{detail} Sprawdź logowanie/token, "
                     "uprawnienia, wersję CLI, połączenie sieciowe i limity subskrypcji. "
                     "Transkrypt pominięto, aby nie publikować źródeł ani poświadczeń."
                 )
